@@ -1,0 +1,10 @@
+version: "3"
+services:
+  bis-data-distribution-api:
+    container_name: bis-data-distribution-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        pip_install_args: "--trusted-host pypi.org --trusted-host files.pythonhosted.org"
+    ports: ['8080:8080']

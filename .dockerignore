@@ -1,0 +1,17 @@
+# ignore everything else by default
+*
+
+# included
+!requirements.txt
+!api
+!**/*.py
+# Docusaurus static site
+!docs-website/docs
+!docs-website/src
+!docs-website/static
+!docs-website/package*.json
+!docs-website/sidebars.js
+!docs-website/docusaurus.config.js
+
+# This one should only exist in local dev environments, do not commit to repo
+!.env

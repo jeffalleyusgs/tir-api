@@ -1,0 +1,133 @@
+# .gitlab-ci.yml for tir-api
+#
+# This builds a Docker image and tags it as the latest for its branch.
+# After building, it will trigger a deployment pipeline in another repo.
+#
+# NOTE: The Docker image registry is currently located at
+#       https://code.chs.usgs.gov/sas/bioscience/sgcn/sgcn-api/container_registry
+#
+# == Reference:
+#   - https://sas.cr.usgs.gov/
+#   - https://docs.gitlab.com/ee/ci/yaml/
+#   - https://docs.gitlab.com/ee/ci/multi_project_pipelines.html
+#
+# == CI Variables:
+#   The following CI variables are expected to be set outside of this file.
+#
+#   DOCKER_REGISTRY
+#     Address to the Docker image registry.
+#
+#   DOCKER_REGISTRY_USER
+#     The username for authenticating with the Docker image registry.
+#
+#   DOCKER_REGISTRY_PASS
+#     The password. for authenticating with the Docker image registry.
+#
+#   DEPLOY_TRIGGER_TOKEN
+#     The API token for the deployment pipeline as configured on the deployment
+#     repository.
+#
+#   DEPLOY_TRIGGER_URL
+#     The API URL for the deployment pipeline as configured on the deployment
+#     repository.
+#
+#   SAS_IMAGES_URL
+#     Base URL for SAS base images, mirrored and/or forked from upstream
+#     images.
+#
+stages:
+  - Docker Build
+  - Trigger Deployment
+
+variables:
+  # The full name of the Docker image to produce, including the registry address.
+  # In most cases, this should be left alone.
+  IMAGE_NAME: pkg.cr.usgs.gov/sgcn-docker/tir
+
+#
+# == Docker Build
+#
+.docker_build:
+  image: docker:19
+  stage: Docker Build
+  services:
+    - docker:dind
+  tags:
+    - docker
+  only:
+    variables:
+      # We must run on a protected branch to access the DOCKER_REGISTRY_PASS variable.
+      - $CI_COMMIT_REF_PROTECTED == "true"
+  before_script:
+    - docker login -u ${DOCKER_REGISTRY_USER} -p ${DOCKER_REGISTRY_PASS} ${DOCKER_REGISTRY}
+  script:
+    - docker build --pull
+      -t ${IMAGE_NAME}:${IMAGE_TAG}
+      --build-arg node_image=pkg.cr.usgs.gov/base-images/node
+      --build-arg node_image_tag=10.15
+      --build-arg python_image=pkg.cr.usgs.gov/base-images/python
+      --build-arg python_image_tag=3.7-slim-buster
+      -f Dockerfile .
+    - docker push ${IMAGE_NAME}:${IMAGE_TAG}
+
+Docker Build Tag:
+  extends: .docker_build
+  variables:
+    IMAGE_TAG: ${CI_COMMIT_REF_NAME}
+  only:
+    refs:
+      - tags
+
+Docker Build Latest:
+  extends: .docker_build
+  variables:
+    IMAGE_TAG: latest
+  only:
+    refs:
+      - master
+
+#
+# == Deployment Triggers
+#
+# These jobs use 'curl' to make a request to the GitLab API to trigger the
+# deployment repository's pipeline. The pipeline trigger is configured on
+# the deployment repository under "Settings -> CI/CD -> Pipeline Triggers",
+# which provides an API URL and token. Those values are maintained as
+# variables in GitLab under '/sas/bioscience/tir' for this project.
+#
+# References:
+#   - https://docs.gitlab.com/ee/ci/triggers/README.html
+#
+.deploy_trigger:
+  image: pkg.cr.usgs.gov/base-images/curl:latest
+  stage: Trigger Deployment
+  tags:
+    - docker
+  only:
+    variables:
+      - $CI_COMMIT_REF_PROTECTED == "true"
+  script:
+    - curl -X POST
+      -F variables[API_IMAGE_NAME]=${IMAGE_NAME}
+      -F variables[API_IMAGE_TAG]=${DEPLOY_IMAGE_TAG}
+      -F token=${DEPLOY_TRIGGER_TOKEN}
+      -F ref=${DEPLOY_TRIGGER_REF}
+      ${DEPLOY_TRIGGER_URL}
+
+Development deployment:
+  extends: .deploy_trigger
+  only:
+    refs:
+      - master
+  variables:
+    DEPLOY_TRIGGER_REF: develop
+    DEPLOY_IMAGE_TAG: latest
+
+Staging deployment:
+  extends: .deploy_trigger
+  only:
+    refs:
+      - tags
+  variables:
+    DEPLOY_TRIGGER_REF: release
+    DEPLOY_IMAGE_TAG: ${CI_COMMIT_TAG}

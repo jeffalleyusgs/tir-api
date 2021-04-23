@@ -1,0 +1,7 @@
+__pycache__
+*.todo
+.env
+.vscode/
+.vim/
+.project
+.pydevproject
