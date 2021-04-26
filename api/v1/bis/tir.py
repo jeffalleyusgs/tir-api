@@ -135,20 +135,17 @@ class SearchTirRecords(Resource):
             criterion_type = request.args.get('criterion_type')
             data_type = request.args.get('data_type')
 
-            ecos_dict = ecos.get_entire_ecos_set()
+            ecos_found = ecos.get_single_entry(criteria)
 
             full_data = dict()
 
-            if criteria in ecos_dict.keys():
-                ecos_data = ecos_dict[criteria]
-                full_data['commonname'] = ecos_data['commonname']
-                full_data['status'] = ecos_data['status']
-                full_data['status_date'] = ecos_data['date']
+            if ecos_found:
+                full_data['commonname'] = ecos_found['commonname']
+                full_data['status'] = ecos_found['ESA_listings'][0]['status']
+                full_data['status_date'] = ecos_found['ESA_listings'][0]['date']
             else:
                 full_data['commonname'] = 'TBD'
                 ecos_data = {'data' : 'none found'}
-
-            ecos_found = ecos.get_single_entry(criteria)
 
             if criterion_type == 'scientific_name':
                 itis_tsn = itis.get_tsn_from_scientific_name(criteria)
@@ -161,7 +158,7 @@ class SearchTirRecords(Resource):
             worms_data = worms.get_worms_data_from_scientific_name(criteria)
             sgcn_data = sgcn.get_sgcn_aggregate_data(criteria)
 
-            full_data['ecos'] = ecos_found
+            full_data['ecos'] = ecos_found if ecos_found else "no ecos entry"
             full_data['worms'] = worms_data if worms_data else 'no worms entry'
             full_data['sgcn'] = sgcn_data if sgcn_data['total'] != 0 else 'no sgcn entry'
             full_data['itis'] = itis_data
